@@ -1,0 +1,6 @@
+{
+  "name": "PocketForge",
+  "description": "Isolated Android AI coding workspace with built-in Gemini, OpenCode multi-provider support, autonomous targeted file tools, and a sandboxed terminal.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
