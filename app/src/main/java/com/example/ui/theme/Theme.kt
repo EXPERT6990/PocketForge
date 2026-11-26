@@ -1,52 +1,85 @@
 package com.example.ui.theme
 
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
-private val DarkColorScheme =
-  darkColorScheme(primary = Purple80, secondary = PurpleGrey80, tertiary = Pink80)
+@Immutable
+data class IdeExtendedColors(
+    val diffAddText: Color = TerminalEmerald,
+    val diffAddBg: Color = EmeraldContainer,
+    val diffRemoveText: Color = CoralRose,
+    val diffRemoveBg: Color = RoseContainer,
+    val warningText: Color = AmberSignal,
+    val warningBg: Color = AmberContainer,
+    val keywordSyntax: Color = VioletKeyword,
+    val stringSyntax: Color = TerminalEmerald,
+    val numberSyntax: Color = AmberSignal,
+    val commentSyntax: Color = TextMuted,
+    val terminalBg: Color = Color(0xFF070B12),
+    val ambientGlow: Color = ObsidianAmbient,
+    val hairlineBorder: Color = HairlineSlate
+)
 
-private val LightColorScheme =
-  lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
+val LocalIdeColors = staticCompositionLocalOf { IdeExtendedColors() }
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-  )
+private val PocketForgeDarkColorScheme = darkColorScheme(
+    primary = ElectricCyan,
+    onPrimary = OnElectricCyan,
+    primaryContainer = CyanMutedContainer,
+    onPrimaryContainer = ElectricCyan,
+    secondary = SteelSky,
+    onSecondary = OnElectricCyan,
+    secondaryContainer = SkyMutedContainer,
+    onSecondaryContainer = SteelSky,
+    tertiary = TerminalEmerald,
+    onTertiary = OnElectricCyan,
+    tertiaryContainer = EmeraldContainer,
+    onTertiaryContainer = TerminalEmerald,
+    error = CoralRose,
+    onError = Color.White,
+    errorContainer = RoseContainer,
+    onErrorContainer = CoralRose,
+    background = ObsidianBg,
+    onBackground = TextPrimary,
+    surface = MidnightSurface,
+    onSurface = TextPrimary,
+    surfaceVariant = EditorSlate,
+    onSurfaceVariant = TextSecondary,
+    surfaceContainerLowest = ObsidianBg,
+    surfaceContainerLow = MidnightSurface,
+    surfaceContainer = EditorSlate,
+    surfaceContainerHigh = ActiveSlate,
+    surfaceContainerHighest = ElevatedSlate,
+    outline = TextMuted,
+    outlineVariant = HairlineSlate
+)
+
+private val PocketForgeShapes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(22.dp)
+)
 
 @Composable
-fun MyApplicationTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
-  content: @Composable () -> Unit,
+fun PocketForgeTheme(
+    content: @Composable () -> Unit
 ) {
-  val colorScheme =
-    when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-      }
-
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
+    CompositionLocalProvider(LocalIdeColors provides IdeExtendedColors()) {
+        MaterialTheme(
+            colorScheme = PocketForgeDarkColorScheme,
+            typography = AppTypography,
+            shapes = PocketForgeShapes,
+            content = content
+        )
     }
-
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }

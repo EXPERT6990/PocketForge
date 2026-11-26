@@ -1,3 +1,15 @@
 <resources>
     <string name="app_name">PocketForge</string>
+    <string name="tab_agent">Agent</string>
+    <string name="tab_files">Files</string>
+    <string name="tab_terminal">Terminal</string>
+    <string name="tab_configure">Configure</string>
+    <string name="workspaces_title">Workspaces</string>
+    <string name="new_workspace">New Workspace</string>
+    <string name="new_session">New Session</string>
+    <string name="prompt_hint">Ask PocketForge to search, edit, or run commands…</string>
+    <string name="terminal_hint">Enter workspace command (e.g., ls -la, grep -rn)…</string>
+    <string name="sync_opencode">Sync OpenCode Catalog</string>
+    <string name="autonomous_badge">AUTONOMOUS</string>
+    <string name="isolated_storage_badge">ISOLATED SANDBOX</string>
 </resources>
