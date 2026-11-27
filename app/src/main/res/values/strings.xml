@@ -4,6 +4,8 @@
     <string name="tab_files">Files</string>
     <string name="tab_terminal">Terminal</string>
     <string name="tab_configure">Configure</string>
+    <string name="tab_web_ai">Web AI</string>
+    <string name="web_sign_in_privacy_note">Your account will be used for the ai credit, but your information is private to you. We do not accept data from users and all data will be located in your device</string>
     <string name="workspaces_title">Workspaces</string>
     <string name="new_workspace">New Workspace</string>
     <string name="new_session">New Session</string>

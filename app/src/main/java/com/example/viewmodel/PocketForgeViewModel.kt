@@ -30,9 +30,20 @@ import kotlinx.coroutines.launch
 
 enum class MainTab {
     AGENT,
+    WEB_AI,
     FILES,
     TERMINAL,
     CONFIGURE
+}
+
+enum class WebCompanionProvider(
+    val displayName: String,
+    val url: String,
+    val subtitle: String
+) {
+    GEMINI_WEB("Gemini", "https://gemini.google.com/app", "Google AI / Gemini account"),
+    CHATGPT_WEB("ChatGPT", "https://chatgpt.com", "OpenAI Plus / Pro account"),
+    CLAUDE_WEB("Claude", "https://claude.ai", "Anthropic Claude Pro / Max account")
 }
 
 data class StatusBanner(
@@ -72,7 +83,8 @@ data class PocketForgeUiState(
     val catalogSearchQuery: String = "",
     val testingProviderId: String? = null,
     val banner: StatusBanner? = null,
-    val draftPrompt: String = ""
+    val draftPrompt: String = "",
+    val selectedWebProvider: WebCompanionProvider = WebCompanionProvider.GEMINI_WEB
 ) {
     val activeWorkspace: WorkspaceEntity?
         get() = workspaces.firstOrNull { it.id == activeWorkspaceId } ?: workspaces.firstOrNull()
@@ -684,6 +696,61 @@ class PocketForgeViewModel(
         viewModelScope.launch {
             repo.deletePromptProfile(profileId)
             _uiState.update { it.copy(banner = StatusBanner("Deleted custom prompt profile")) }
+        }
+    }
+
+    // --- Web Companion Subscription Bridge ---
+
+    fun selectWebProvider(provider: WebCompanionProvider) {
+        _uiState.update { it.copy(selectedWebProvider = provider) }
+    }
+
+    fun showInfoBanner(message: String) {
+        _uiState.update { it.copy(banner = StatusBanner(message, isError = false)) }
+    }
+
+    suspend fun buildTreeContextForWeb(): String? {
+        val ws = _uiState.value.activeWorkspace ?: return null
+        return repo.buildTreeContextForWeb(ws)
+    }
+
+    suspend fun buildGrepContextForWeb(pattern: String): String? {
+        val ws = _uiState.value.activeWorkspace ?: return null
+        return repo.buildGrepContextForWeb(ws, pattern)
+    }
+
+    suspend fun buildFileRangeContextForWeb(relativePath: String, startLine: Int, endLine: Int): String? {
+        val ws = _uiState.value.activeWorkspace ?: return null
+        return repo.buildFileRangeContextForWeb(ws, relativePath, startLine, endLine)
+    }
+
+    suspend fun previewClipboardPatch(
+        proposal: com.example.data.sandbox.ClipboardPatchProposal,
+        targetPath: String
+    ): Result<String> {
+        val ws = _uiState.value.activeWorkspace
+            ?: return Result.failure(IllegalStateException("No active workspace."))
+        return repo.previewClipboardPatch(ws, proposal, targetPath)
+    }
+
+    fun applyClipboardPatch(
+        proposal: com.example.data.sandbox.ClipboardPatchProposal,
+        targetPath: String,
+        onApplied: () -> Unit = {}
+    ) {
+        val ws = _uiState.value.activeWorkspace ?: return
+        viewModelScope.launch {
+            try {
+                val summary = repo.applyClipboardPatch(ws, proposal, targetPath)
+                refreshWorkspaceFiles(ws.rootDirName)
+                reloadOpenEditorIfNeeded(ws.rootDirName)
+                _uiState.update {
+                    it.copy(banner = StatusBanner("Applied from Web AI: $summary (Undo snapshot saved)"))
+                }
+                onApplied()
+            } catch (e: Exception) {
+                showError("Patch apply failed: ${e.localizedMessage}")
+            }
         }
     }
 

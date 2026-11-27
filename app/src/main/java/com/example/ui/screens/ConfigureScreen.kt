@@ -58,11 +58,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.ui.platform.LocalContext
 import com.example.data.db.CatalogModelEntity
 import com.example.data.db.PromptProfileEntity
 import com.example.data.db.ProviderConfigEntity
 import com.example.data.db.ProviderProtocol
 import com.example.data.db.WorkspaceToolName
+import com.example.getFirebaseDiagnosticStatus
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.LocalIdeColors
 import com.example.viewmodel.PocketForgeUiState
@@ -195,7 +203,11 @@ private fun ProvidersAndOpenCodePane(
     onDeleteProvider: (ProviderConfigEntity) -> Unit,
     onTestProvider: (ProviderConfigEntity) -> Unit
 ) {
+    val context = LocalContext.current
     val ideColors = LocalIdeColors.current
+    val firebaseStatus = remember(context) { getFirebaseDiagnosticStatus(context) }
+    var pendingKeyPortal by remember { mutableStateOf<Pair<String, String>?>(null) }
+
     val filteredCatalog = remember(uiState.catalogModels, uiState.catalogSearchQuery) {
         val q = uiState.catalogSearchQuery.trim()
         val list = if (q.isEmpty()) uiState.catalogModels else uiState.catalogModels.filter {
@@ -212,13 +224,63 @@ private fun ProvidersAndOpenCodePane(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxSize()
     ) {
+        // Guided Quick Connect Official API Keys Strip
+        item {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Guided API Key Setup (Gemini · OpenAI · Claude)", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = "Open the official developer portal to grab a personal key, then paste it into the encrypted Keystore vault below.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { pendingKeyPortal = "Google AI Studio (Gemini)" to "https://aistudio.google.com/apikey" },
+                            modifier = Modifier.testTag("guided_key_gemini")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("Gemini Key")
+                        }
+                        OutlinedButton(
+                            onClick = { pendingKeyPortal = "OpenAI Platform" to "https://platform.openai.com/api-keys" },
+                            modifier = Modifier.testTag("guided_key_openai")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("OpenAI Key")
+                        }
+                        OutlinedButton(
+                            onClick = { pendingKeyPortal = "Anthropic Console" to "https://console.anthropic.com/settings/keys" },
+                            modifier = Modifier.testTag("guided_key_claude")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("Claude Key")
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Configured Providers", style = MaterialTheme.typography.titleMedium)
                     Text(
                         text = "API keys are AES-256 encrypted locally in Android Keystore.",
@@ -282,7 +344,14 @@ private fun ProvidersAndOpenCodePane(
                         }
                     }
 
-                    if (masked != null) {
+                    if (isBuiltIn) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Firebase AI Logic: $firebaseStatus",
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoFontFamily),
+                            color = ideColors.diffAddText
+                        )
+                    } else if (masked != null) {
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text = "Key: $masked",
@@ -432,6 +501,20 @@ private fun ProvidersAndOpenCodePane(
                 }
             }
         }
+    }
+
+    pendingKeyPortal?.let { (portalName, url) ->
+        WebSignInPrivacyDialog(
+            providerTitle = portalName,
+            targetUrl = url,
+            onConfirmProceed = {
+                pendingKeyPortal = null
+                runCatching {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                }
+            },
+            onDismiss = { pendingKeyPortal = null }
+        )
     }
 }
 
@@ -657,11 +740,23 @@ private fun ProviderEditorDialog(
     onSave: (ProviderConfigEntity, String?) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     var displayName by remember { mutableStateOf(initial.displayName) }
     var baseUrl by remember { mutableStateOf(initial.baseUrl) }
     var modelId by remember { mutableStateOf(initial.selectedModelId) }
     var protocol by remember { mutableStateOf(initial.protocol) }
     var apiKey by remember { mutableStateOf("") }
+    var pendingPortalRedirect by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    val officialKeyPortal = remember(initial.id) {
+        when (initial.id) {
+            "google_ai_studio" -> "Google AI Studio" to "https://aistudio.google.com/apikey"
+            "openai" -> "OpenAI Platform" to "https://platform.openai.com/api-keys"
+            "anthropic" -> "Anthropic Console" to "https://console.anthropic.com/settings/keys"
+            "openrouter" -> "OpenRouter Keys" to "https://openrouter.ai/keys"
+            else -> null
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -713,12 +808,33 @@ private fun ProviderEditorDialog(
                             else "API Key (encrypted via Android Keystore)"
                         )
                     },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                val pasted = cm?.primaryClip?.takeIf { it.itemCount > 0 }
+                                    ?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
+                                if (!pasted.isNullOrBlank()) apiKey = pasted
+                            }
+                        ) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = "Paste API key from clipboard")
+                        }
+                    },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("provider_api_key_input")
                 )
+                if (officialKeyPortal != null) {
+                    TextButton(
+                        onClick = { pendingPortalRedirect = officialKeyPortal }
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Get Official Key from ${officialKeyPortal.first}")
+                    }
+                }
             }
         },
         confirmButton = {
@@ -741,4 +857,18 @@ private fun ProviderEditorDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+
+    pendingPortalRedirect?.let { (portalName, url) ->
+        WebSignInPrivacyDialog(
+            providerTitle = portalName,
+            targetUrl = url,
+            onConfirmProceed = {
+                pendingPortalRedirect = null
+                runCatching {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                }
+            },
+            onDismiss = { pendingPortalRedirect = null }
+        )
+    }
 }

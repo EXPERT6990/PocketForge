@@ -53,8 +53,10 @@ class PocketForgeRepository(
         db.terminalDao().observeForWorkspace(workspaceId)
 
     suspend fun ensureSeeded(): Pair<WorkspaceEntity, ChatSessionEntity> = withContext(Dispatchers.IO) {
-        if (db.providerDao().getAllOnce().isEmpty()) {
-            db.providerDao().upsertAll(DefaultSeeds.defaultProviders())
+        val existingProviders = db.providerDao().getAllOnce().map { it.id }.toSet()
+        val missingDefaults = DefaultSeeds.defaultProviders().filter { it.id !in existingProviders }
+        if (missingDefaults.isNotEmpty()) {
+            db.providerDao().upsertAll(missingDefaults)
         }
         if (db.catalogModelDao().count() == 0) {
             db.catalogModelDao().upsertAll(DefaultSeeds.defaultCatalogModels())
@@ -347,5 +349,112 @@ class PocketForgeRepository(
 
     suspend fun deletePromptProfile(profileId: String) = withContext(Dispatchers.IO) {
         db.promptProfileDao().deleteNonDefault(profileId)
+    }
+
+    // --- Web Companion Context & Clipboard Patch Bridge ---
+
+    suspend fun buildTreeContextForWeb(workspace: WorkspaceEntity): String = withContext(Dispatchers.IO) {
+        val tree = sandbox.listTree(workspace.rootDirName, ".", maxDepth = 5)
+        com.example.data.sandbox.ClipboardPatchParser.buildContextPromptWrapper(
+            workspaceName = workspace.name,
+            contextTitle = "Workspace File Tree",
+            contextPayload = tree
+        )
+    }
+
+    suspend fun buildGrepContextForWeb(workspace: WorkspaceEntity, pattern: String): String =
+        withContext(Dispatchers.IO) {
+            val matches = sandbox.grepSearch(workspace.rootDirName, pattern, ".", contextLines = 2, maxResults = 40)
+            val payload = if (matches.isEmpty()) {
+                "No matches found for pattern '$pattern'."
+            } else {
+                matches.joinToString("\n\n") { m ->
+                    buildString {
+                        m.contextBefore.forEachIndexed { idx, line ->
+                            appendLine("${m.relativePath}:${m.lineNumber - (m.contextBefore.size - idx)}- $line")
+                        }
+                        append("${m.relativePath}:${m.lineNumber}: ${m.lineText}")
+                        m.contextAfter.forEachIndexed { idx, line ->
+                            append("\n${m.relativePath}:${m.lineNumber + idx + 1}- $line")
+                        }
+                    }
+                }
+            }
+            com.example.data.sandbox.ClipboardPatchParser.buildContextPromptWrapper(
+                workspaceName = workspace.name,
+                contextTitle = "Grep Search ('$pattern' -> ${matches.size} matches)",
+                contextPayload = payload
+            )
+        }
+
+    suspend fun buildFileRangeContextForWeb(
+        workspace: WorkspaceEntity,
+        relativePath: String,
+        startLine: Int,
+        endLine: Int
+    ): String = withContext(Dispatchers.IO) {
+        val slice = sandbox.readFileRange(
+            rootDirName = workspace.rootDirName,
+            relativePath = relativePath,
+            startLine = startLine,
+            endLine = endLine,
+            maxLinesCap = 250
+        )
+        com.example.data.sandbox.ClipboardPatchParser.buildContextPromptWrapper(
+            workspaceName = workspace.name,
+            contextTitle = "File Range $relativePath (L$startLine-L$endLine)",
+            contextPayload = slice
+        )
+    }
+
+    suspend fun previewClipboardPatch(
+        workspace: WorkspaceEntity,
+        proposal: com.example.data.sandbox.ClipboardPatchProposal,
+        targetPathOverride: String
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val relPath = targetPathOverride.trim()
+            if (relPath.isEmpty()) throw IllegalArgumentException("Please enter a destination file path.")
+            val file = sandbox.resolveSafe(workspace.rootDirName, relPath)
+            val existing = if (file.exists() && file.isFile) file.readText(Charsets.UTF_8) else ""
+            val proposedNew = when (proposal.kind) {
+                com.example.data.sandbox.ClipboardPatchKind.SEARCH_REPLACE -> {
+                    if (!file.exists()) throw IllegalStateException("File '$relPath' does not exist for search/replace.")
+                    if (!existing.contains(proposal.searchBlock)) {
+                        throw IllegalArgumentException("Search block not found in $relPath.")
+                    }
+                    existing.replaceFirst(proposal.searchBlock, proposal.replaceOrContent)
+                }
+                else -> proposal.replaceOrContent
+            }
+            sandbox.buildUnifiedDiff(existing, proposedNew, relPath)
+        }
+    }
+
+    suspend fun applyClipboardPatch(
+        workspace: WorkspaceEntity,
+        proposal: com.example.data.sandbox.ClipboardPatchProposal,
+        targetPathOverride: String
+    ): String = withContext(Dispatchers.IO) {
+        val relPath = targetPathOverride.trim()
+        if (relPath.isEmpty()) throw IllegalArgumentException("Please enter a destination file path.")
+        val result = when (proposal.kind) {
+            com.example.data.sandbox.ClipboardPatchKind.SEARCH_REPLACE -> {
+                sandbox.patchFile(workspace.rootDirName, relPath, proposal.searchBlock, proposal.replaceOrContent)
+            }
+            else -> {
+                sandbox.writeFile(workspace.rootDirName, relPath, proposal.replaceOrContent)
+            }
+        }
+        val snap = FileSnapshotEntity(
+            id = UUID.randomUUID().toString(),
+            workspaceId = workspace.id,
+            relativePath = result.relativePath,
+            previousContent = result.previousContent,
+            newContent = result.newContent
+        )
+        db.snapshotDao().upsert(snap)
+        db.workspaceDao().touch(workspace.id)
+        result.summary
     }
 }

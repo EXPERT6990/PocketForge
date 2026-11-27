@@ -1,7 +1,9 @@
 package com.example.data.ai
 
+import android.content.Context
 import android.util.Log
 import com.example.data.db.ProviderConfigEntity
+import com.example.ensureFirebaseInitialized
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.content
@@ -14,7 +16,9 @@ import kotlinx.coroutines.withTimeout
  * Built-in Gemini provider backed by Firebase AI Logic (`Firebase.ai`) and App Check.
  * Requires zero client-side API keys and streams responses via `generateContentStream()`.
  */
-class GeminiFirebaseClient : AiProviderClient {
+class GeminiFirebaseClient(
+    private val appContext: Context
+) : AiProviderClient {
 
     override suspend fun generateTurn(
         config: ProviderConfigEntity,
@@ -25,8 +29,14 @@ class GeminiFirebaseClient : AiProviderClient {
         enabledTools: List<AgentToolDefinition>,
         onPartialText: (String) -> Unit
     ): AgentStepResponse {
+        val firebaseApp = ensureFirebaseInitialized(appContext)
+            ?: throw IllegalStateException(
+                "Built-in Gemini is unavailable because FirebaseApp could not initialize in this build. " +
+                    "Verify google-services.json is present or switch to Web AI / Gemini (AI Studio Key) in Configure."
+            )
+
         val safeModelId = modelId.ifBlank { "gemini-3.8-flash" }
-        val model = Firebase.ai.generativeModel(
+        val model = Firebase.ai(app = firebaseApp).generativeModel(
             modelName = safeModelId,
             generationConfig = generationConfig {
                 temperature = 0.25f

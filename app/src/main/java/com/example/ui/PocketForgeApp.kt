@@ -32,11 +32,13 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderSpecial
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.CircularProgressIndicator
@@ -74,6 +76,7 @@ import com.example.ui.screens.AgentScreen
 import com.example.ui.screens.ConfigureScreen
 import com.example.ui.screens.FilesScreen
 import com.example.ui.screens.TerminalScreen
+import com.example.ui.screens.WebCompanionScreen
 import com.example.ui.theme.LocalIdeColors
 import com.example.viewmodel.MainTab
 import com.example.viewmodel.PocketForgeUiState
@@ -182,6 +185,16 @@ fun PocketForgeApp(
                         // Right supporting pane switches between Files, Terminal, and Configure
                         Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                             when (uiState.activeTab) {
+                                MainTab.WEB_AI -> WebCompanionScreen(
+                                    uiState = uiState,
+                                    onSelectProvider = viewModel::selectWebProvider,
+                                    onBuildTreeContext = viewModel::buildTreeContextForWeb,
+                                    onBuildGrepContext = viewModel::buildGrepContextForWeb,
+                                    onBuildFileRangeContext = viewModel::buildFileRangeContextForWeb,
+                                    onPreviewPatch = viewModel::previewClipboardPatch,
+                                    onApplyPatch = viewModel::applyClipboardPatch,
+                                    onNotify = viewModel::showInfoBanner
+                                )
                                 MainTab.TERMINAL -> TerminalScreen(
                                     uiState = uiState,
                                     onRunCommand = viewModel::executeTerminalCommand,
@@ -280,6 +293,16 @@ fun PocketForgeApp(
                             onCreateSession = { viewModel.createSession() },
                             onClearSession = viewModel::clearActiveSession,
                             onUndoSnapshot = viewModel::revertSnapshot
+                        )
+                        MainTab.WEB_AI -> WebCompanionScreen(
+                            uiState = uiState,
+                            onSelectProvider = viewModel::selectWebProvider,
+                            onBuildTreeContext = viewModel::buildTreeContextForWeb,
+                            onBuildGrepContext = viewModel::buildGrepContextForWeb,
+                            onBuildFileRangeContext = viewModel::buildFileRangeContextForWeb,
+                            onPreviewPatch = viewModel::previewClipboardPatch,
+                            onApplyPatch = viewModel::applyClipboardPatch,
+                            onNotify = viewModel::showInfoBanner
                         )
                         MainTab.FILES -> FilesScreen(
                             uiState = uiState,
@@ -497,6 +520,7 @@ private data class NavItem(
 
 private val NAV_ITEMS = listOf(
     NavItem(MainTab.AGENT, "Agent", Icons.Filled.AutoAwesome, Icons.Outlined.AutoAwesome),
+    NavItem(MainTab.WEB_AI, "Web AI", Icons.Filled.Language, Icons.Outlined.Language),
     NavItem(MainTab.FILES, "Files", Icons.Filled.Folder, Icons.Outlined.Folder),
     NavItem(MainTab.TERMINAL, "Terminal", Icons.Filled.Terminal, Icons.Outlined.Terminal),
     NavItem(MainTab.CONFIGURE, "Configure", Icons.Filled.Tune, Icons.Outlined.Tune)

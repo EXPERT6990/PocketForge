@@ -67,6 +67,17 @@ object DefaultSeeds {
             description = "Zero-config Firebase AI Logic with App Check. No API key required."
         ),
         ProviderConfigEntity(
+            id = "google_ai_studio",
+            displayName = "Gemini (AI Studio Key)",
+            protocol = ProviderProtocol.OPENAI_COMPATIBLE,
+            baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai",
+            selectedModelId = DEFAULT_GEMINI_MODEL,
+            apiKeyAlias = "key_google_ai_studio",
+            enabled = true,
+            isCustom = false,
+            description = "Optional personal Google AI Studio API key (free tier or paid quota)."
+        ),
+        ProviderConfigEntity(
             id = "openai",
             displayName = "OpenAI",
             protocol = ProviderProtocol.OPENAI_COMPATIBLE,

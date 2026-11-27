@@ -17,7 +17,7 @@ class AppContainer(context: Context) {
     val secretVault: SecretVault by lazy { SecretVault(appContext) }
     val sandbox: WorkspaceSandbox by lazy { WorkspaceSandbox(appContext) }
     val terminalEngine: SandboxedTerminalEngine by lazy { SandboxedTerminalEngine(sandbox) }
-    val geminiClient: GeminiFirebaseClient by lazy { GeminiFirebaseClient() }
+    val geminiClient: GeminiFirebaseClient by lazy { GeminiFirebaseClient(appContext) }
     val httpClient: HttpAiProviderClient by lazy { HttpAiProviderClient() }
     val catalogService: OpenCodeCatalogService by lazy { OpenCodeCatalogService() }
 
