@@ -78,6 +78,13 @@ data class AgentToolDefinition(
         }
         return "- $name($sig): $description"
     }
+
+    fun toCompactPromptLine(): String {
+        val sig = params.joinToString(",") {
+            if (it.required) it.name else "${it.name}?"
+        }
+        return "$name($sig)"
+    }
 }
 
 data class AgentToolCall(

@@ -16,6 +16,7 @@ import com.theexpert9.pocketforge.data.db.ToolStatus
 import com.theexpert9.pocketforge.data.db.WorkspaceEntity
 import com.theexpert9.pocketforge.data.db.WorkspaceToolName
 import com.theexpert9.pocketforge.data.sandbox.SandboxedTerminalEngine
+import com.theexpert9.pocketforge.data.sandbox.TermuxBridge
 import com.theexpert9.pocketforge.data.sandbox.WorkspaceSandbox
 import com.theexpert9.pocketforge.data.security.SecretVault
 import kotlinx.coroutines.CancellationException
@@ -47,7 +48,8 @@ class AutonomousAgentOrchestrator(
     private val providerDao: ProviderDao,
     private val messageDao: MessageDao,
     private val snapshotDao: SnapshotDao,
-    private val sessionDao: SessionDao
+    private val sessionDao: SessionDao,
+    private val termuxBridge: TermuxBridge? = null
 ) {
 
     suspend fun runUserPrompt(
@@ -215,7 +217,7 @@ class AutonomousAgentOrchestrator(
                     role = "tool",
                     toolCallId = toolCall.id,
                     toolName = toolCall.name,
-                    text = execution.output.take(6_000)
+                    text = execution.output.take(3_500)
                 )
             }
         }
@@ -395,7 +397,7 @@ class AutonomousAgentOrchestrator(
         val updatedWorkingDir: String
     )
 
-    private fun executeSingleTool(
+    private suspend fun executeSingleTool(
         workspace: WorkspaceEntity,
         profile: PromptProfileEntity,
         toolCall: AgentToolCall,
@@ -534,7 +536,14 @@ class AutonomousAgentOrchestrator(
                 }
                 WorkspaceToolName.RUN_COMMAND -> {
                     val cmd = args.optString("command")
-                    val res = terminalEngine.execute(workspace.rootDirName, currentWorkingDir, cmd)
+                    val useTermux = termuxBridge != null &&
+                        termuxBridge.getStatus().isReady &&
+                        termuxBridge.shouldDelegateToTermux(cmd)
+                    val res = if (useTermux) {
+                        termuxBridge!!.executeCommand(workspace.rootDirName, currentWorkingDir, cmd)
+                    } else {
+                        terminalEngine.execute(workspace.rootDirName, currentWorkingDir, cmd)
+                    }
                     val out = buildString {
                         appendLine("$ $cmd (exit ${res.exitCode})")
                         if (res.output.isNotBlank()) append(res.output)
@@ -567,7 +576,7 @@ class AutonomousAgentOrchestrator(
     }
 
     private suspend fun buildInitialHistory(sessionId: String): MutableList<AgentConversationTurn> {
-        val recent = messageDao.getForSessionOnce(sessionId).takeLast(24)
+        val recent = messageDao.getForSessionOnce(sessionId).takeLast(16)
         val turns = mutableListOf<AgentConversationTurn>()
         for (msg in recent) {
             when (msg.role) {
@@ -576,7 +585,7 @@ class AutonomousAgentOrchestrator(
                 MessageRole.TOOL -> turns += AgentConversationTurn(
                     role = "tool",
                     toolName = msg.toolName,
-                    text = (msg.toolResult ?: msg.content).take(2_500)
+                    text = (msg.toolResult ?: msg.content).take(1_500)
                 )
                 MessageRole.SYSTEM -> {
                     // System notices (such as failover banners) are UI-only telemetry
@@ -591,32 +600,35 @@ class AutonomousAgentOrchestrator(
         profile: PromptProfileEntity,
         enabledTools: List<AgentToolDefinition>
     ): String {
-        val topTree = sandbox.listTree(workspace.rootDirName, ".", maxDepth = 2)
-        val toolCatalog = enabledTools.joinToString("\n") { it.toPromptLine() }
-        return buildString {
-            appendLine(profile.systemPrompt)
-            appendLine()
-            appendLine("=== ISOLATED WORKSPACE CONTEXT ===")
-            appendLine("Workspace Name: ${workspace.name}")
-            appendLine("Template: ${workspace.template}")
-            appendLine("Max Lines Per read_file_range Call: ${profile.maxReadLines}")
-            appendLine("Current Top-Level Tree:")
-            appendLine(topTree)
-            appendLine()
-            appendLine("=== FILE ACCESS & TOKEN EFFICIENCY RULES ===")
-            appendLine(profile.toolAccessRules)
-            appendLine()
-            appendLine("=== AVAILABLE WORKSPACE TOOLS ===")
-            appendLine(toolCatalog.ifBlank { "(No tools enabled)" })
-            appendLine()
-            appendLine("=== TOOL INVOCATION PROTOCOL ===")
-            appendLine("To invoke a tool, output one or more blocks using this exact format (valid JSON inside):")
-            appendLine("<tool_call>{\"tool\":\"grep_search\",\"args\":{\"pattern\":\"isExpired\",\"path\":\".\",\"context_lines\":1}}</tool_call>")
-            appendLine("Wait for [TOOL_RESULT] before assuming file contents. When done, respond normally without <tool_call> tags.")
-            appendLine()
-            appendLine("=== RESPONSE FORMAT ===")
-            appendLine(profile.responseFormatRules)
+        val topEntries = sandbox.listTree(workspace.rootDirName, ".", maxDepth = 1)
+            .lines()
+            .take(15)
+            .joinToString("\n")
+            .take(500)
+        val compactTools = enabledTools.joinToString(", ") { it.toCompactPromptLine() }
+        val termuxNote = if (termuxBridge?.getStatus()?.isReady == true) {
+            " Termux toolchain active for python3/java/javac/g++/node/gradle."
+        } else {
+            ""
         }
+
+        return buildString {
+            appendLine(profile.systemPrompt.trim())
+            appendLine("Workspace: ${workspace.name} (${workspace.template}), maxRead=${profile.maxReadLines}L.$termuxNote")
+            if (topEntries.isNotBlank()) {
+                appendLine("Files:\n$topEntries")
+            }
+            if (compactTools.isNotBlank()) {
+                appendLine("Tools: $compactTools")
+                appendLine("Tool format (use ONLY when inspecting/editing workspace files; for standalone code examples or general questions reply directly without calling tools): <tool_call>{\"tool\":\"name\",\"args\":{...}}</tool_call>")
+            }
+            if (profile.toolAccessRules.isNotBlank()) {
+                appendLine(profile.toolAccessRules.trim())
+            }
+            if (profile.responseFormatRules.isNotBlank()) {
+                appendLine(profile.responseFormatRules.trim())
+            }
+        }.trim()
     }
 
     companion object {

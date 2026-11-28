@@ -54,6 +54,9 @@ interface SessionDao {
     @Query("UPDATE chat_sessions SET totalToolSteps = totalToolSteps + :delta, updatedAt = :timestamp WHERE id = :sessionId")
     suspend fun incrementSteps(sessionId: String, delta: Int, timestamp: Long = System.currentTimeMillis())
 
+    @Query("UPDATE chat_sessions SET modelId = :newModelId WHERE providerId = :providerId AND modelId = :oldModelId")
+    suspend fun migrateModelForProvider(providerId: String, oldModelId: String, newModelId: String)
+
     @Query("DELETE FROM chat_sessions WHERE id = :sessionId")
     suspend fun deleteById(sessionId: String)
 }
@@ -121,7 +124,13 @@ interface CatalogModelDao {
     suspend fun count(): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(model: CatalogModelEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(models: List<CatalogModelEntity>)
+
+    @Query("DELETE FROM catalog_models WHERE compositeId = :compositeId")
+    suspend fun deleteByCompositeId(compositeId: String)
 
     @Query("DELETE FROM catalog_models")
     suspend fun clearAll()

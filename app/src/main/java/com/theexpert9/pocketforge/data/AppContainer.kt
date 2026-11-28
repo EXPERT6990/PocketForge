@@ -7,6 +7,7 @@ import com.theexpert9.pocketforge.data.ai.HttpAiProviderClient
 import com.theexpert9.pocketforge.data.ai.OpenCodeCatalogService
 import com.theexpert9.pocketforge.data.db.PocketForgeDatabase
 import com.theexpert9.pocketforge.data.sandbox.SandboxedTerminalEngine
+import com.theexpert9.pocketforge.data.sandbox.TermuxBridge
 import com.theexpert9.pocketforge.data.sandbox.WorkspaceSandbox
 import com.theexpert9.pocketforge.data.security.SecretVault
 
@@ -17,6 +18,7 @@ class AppContainer(context: Context) {
     val secretVault: SecretVault by lazy { SecretVault(appContext) }
     val sandbox: WorkspaceSandbox by lazy { WorkspaceSandbox(appContext) }
     val terminalEngine: SandboxedTerminalEngine by lazy { SandboxedTerminalEngine(sandbox) }
+    val termuxBridge: TermuxBridge by lazy { TermuxBridge(appContext, sandbox) }
     val geminiClient: GeminiFirebaseClient by lazy { GeminiFirebaseClient(appContext) }
     val httpClient: HttpAiProviderClient by lazy { HttpAiProviderClient() }
     val catalogService: OpenCodeCatalogService by lazy { OpenCodeCatalogService() }
@@ -31,7 +33,8 @@ class AppContainer(context: Context) {
             providerDao = database.providerDao(),
             messageDao = database.messageDao(),
             snapshotDao = database.snapshotDao(),
-            sessionDao = database.sessionDao()
+            sessionDao = database.sessionDao(),
+            termuxBridge = termuxBridge
         )
     }
 
@@ -40,6 +43,7 @@ class AppContainer(context: Context) {
             db = database,
             sandbox = sandbox,
             terminalEngine = terminalEngine,
+            termuxBridge = termuxBridge,
             secretVault = secretVault,
             catalogService = catalogService,
             httpClient = httpClient,

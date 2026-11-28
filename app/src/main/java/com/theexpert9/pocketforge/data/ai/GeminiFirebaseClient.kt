@@ -40,7 +40,7 @@ class GeminiFirebaseClient(
             modelName = safeModelId,
             generationConfig = generationConfig {
                 temperature = 0.25f
-                maxOutputTokens = 4096
+                maxOutputTokens = 8192
             },
             systemInstruction = content {
                 text(systemInstruction)
@@ -60,6 +60,7 @@ class GeminiFirebaseClient(
         }
 
         val accumulated = StringBuilder()
+        var stoppedByMaxTokens = false
         try {
             withTimeout(60_000L) {
                 model.generateContentStream(contents).collect { chunk ->
@@ -79,14 +80,26 @@ class GeminiFirebaseClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.e(TAG, "Gemini Firebase AI generation failed for model=$safeModelId", e)
-            throw IllegalStateException(
-                "Gemini ($safeModelId) error: ${e.localizedMessage ?: "Generation failed."}",
-                e
-            )
+            val msg = e.localizedMessage.orEmpty()
+            val isMaxTokens = msg.contains("MAX_TOKENS", ignoreCase = true) ||
+                e.javaClass.simpleName.contains("ResponseStopped", ignoreCase = true)
+            if (isMaxTokens && accumulated.isNotBlank()) {
+                Log.w(TAG, "Gemini ($safeModelId) stopped early due to MAX_TOKENS; preserving partial output (${accumulated.length} chars).")
+                stoppedByMaxTokens = true
+            } else {
+                Log.e(TAG, "Gemini Firebase AI generation failed for model=$safeModelId", e)
+                throw IllegalStateException(
+                    "Gemini ($safeModelId) error: ${msg.ifBlank { "Generation failed." }}",
+                    e
+                )
+            }
         }
 
-        val fullText = accumulated.toString()
+        val fullText = if (stoppedByMaxTokens) {
+            "${accumulated.toString().trimEnd()}\n\n_(Output reached token limit — ask \"continue\" if you need the rest.)_"
+        } else {
+            accumulated.toString()
+        }
         if (fullText.isBlank()) {
             throw IllegalStateException("Gemini ($safeModelId) returned an empty response.")
         }

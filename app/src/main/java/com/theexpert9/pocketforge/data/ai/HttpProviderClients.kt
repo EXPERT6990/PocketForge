@@ -231,7 +231,7 @@ class HttpAiProviderClient(
 
         val payload = JSONObject()
             .put("model", modelId)
-            .put("max_tokens", 4096)
+            .put("max_tokens", 8192)
             .put("system", systemInstruction)
             .put("messages", messages)
 

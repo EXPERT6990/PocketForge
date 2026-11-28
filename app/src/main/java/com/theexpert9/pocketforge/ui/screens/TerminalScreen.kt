@@ -68,14 +68,24 @@ fun TerminalScreen(
     var commandText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    val quickCommands = listOf(
-        "tree",
-        "ls -la",
-        "grep -i isExpired .",
-        "find *.kt",
-        "jsonlint config/workspace.json",
-        "help"
-    )
+    val termuxReady = uiState.termuxStatus.isReady
+    val quickCommands = remember(termuxReady) {
+        buildList {
+            add("tree")
+            add("ls -la")
+            add("grep -i isExpired .")
+            if (termuxReady) {
+                add("python3 --version")
+                add("java -version")
+                add("g++ --version")
+                add("node -v")
+            } else {
+                add("find *.kt")
+                add("jsonlint config/workspace.json")
+            }
+            add("help")
+        }
+    }
 
     LaunchedEffect(uiState.terminalEntries.size) {
         if (uiState.terminalEntries.isNotEmpty()) {
@@ -100,7 +110,10 @@ fun TerminalScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Terminal,
                             contentDescription = "Sandboxed terminal",
@@ -110,9 +123,20 @@ fun TerminalScreen(
                         Spacer(Modifier.width(8.dp))
                         val cwdLabel = if (uiState.terminalWorkingDir.isBlank()) "~" else "~/${uiState.terminalWorkingDir}"
                         Text(
-                            text = "pocketforge-sh · $cwdLabel",
+                            text = if (termuxReady) "termux + sandbox · $cwdLabel" else "pocketforge-sh · $cwdLabel",
                             style = MaterialTheme.typography.labelMedium.copy(fontFamily = JetBrainsMonoFontFamily),
                             color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Surface(
+                        shape = CircleShape,
+                        color = if (termuxReady) ideColors.diffAddBg else MaterialTheme.colorScheme.surfaceContainerHigh
+                    ) {
+                        Text(
+                            text = if (termuxReady) "TERMUX ON" else "SANDBOX",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (termuxReady) ideColors.diffAddText else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
                     IconButton(

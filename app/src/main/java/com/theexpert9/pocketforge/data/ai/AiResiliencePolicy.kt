@@ -70,10 +70,15 @@ object AiResiliencePolicy {
         }
     }
 
+    fun isSubscriptionRequiredModel(modelId: String): Boolean {
+        val lower = modelId.lowercase()
+        return lower.contains("gemini-4-argon") || lower.contains("argon")
+    }
+
     /**
      * Builds the ordered list of (providerId, modelId) targets to attempt.
      * Primary target is always first; Gemini providers get automatic fallback across
-     * supported Gemini 3.x / 4 tiers and can bridge from overloaded AI Studio API keys
+     * free-tier Gemini 3.x models and can bridge from overloaded AI Studio API keys
      * to Built-in Firebase Gemini seamlessly.
      */
     fun buildAttemptChain(
@@ -102,8 +107,7 @@ object AiResiliencePolicy {
         if (primaryProvider.protocol == ProviderProtocol.FIREBASE_GEMINI) {
             val firebaseFallbacks = listOf(
                 DefaultSeeds.DEFAULT_GEMINI_MODEL,
-                "gemini-3.5-flash-lite",
-                "gemini-4-argon"
+                "gemini-3.5-flash-lite"
             )
             firebaseFallbacks.forEach { fallbackModel ->
                 if (!fallbackModel.equals(cleanModel, ignoreCase = true)) {

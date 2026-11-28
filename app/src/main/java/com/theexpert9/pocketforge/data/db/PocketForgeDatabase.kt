@@ -172,16 +172,40 @@ object DefaultSeeds {
             protocolHint = ProviderProtocol.FIREBASE_GEMINI
         ),
         CatalogModelEntity(
-            compositeId = "$PROVIDER_FIREBASE_GEMINI:gemini-4-argon",
-            providerId = PROVIDER_FIREBASE_GEMINI,
-            providerName = "Gemini (Built-in)",
-            providerApiUrl = "firebase://ai-logic",
+            compositeId = "google_ai_studio:gemini-3.8-flash",
+            providerId = "google_ai_studio",
+            providerName = "Gemini (AI Studio Key)",
+            providerApiUrl = "https://generativelanguage.googleapis.com/v1beta/openai",
+            modelId = "gemini-3.8-flash",
+            modelName = "Gemini 3.8 Flash",
+            contextLimit = 1_048_576,
+            supportsTools = true,
+            supportsReasoning = true,
+            protocolHint = ProviderProtocol.OPENAI_COMPATIBLE
+        ),
+        CatalogModelEntity(
+            compositeId = "google_ai_studio:gemini-3.5-flash-lite",
+            providerId = "google_ai_studio",
+            providerName = "Gemini (AI Studio Key)",
+            providerApiUrl = "https://generativelanguage.googleapis.com/v1beta/openai",
+            modelId = "gemini-3.5-flash-lite",
+            modelName = "Gemini 3.5 Flash-Lite",
+            contextLimit = 1_048_576,
+            supportsTools = true,
+            supportsReasoning = false,
+            protocolHint = ProviderProtocol.OPENAI_COMPATIBLE
+        ),
+        CatalogModelEntity(
+            compositeId = "google_ai_studio:gemini-4-argon",
+            providerId = "google_ai_studio",
+            providerName = "Gemini (AI Studio Key)",
+            providerApiUrl = "https://generativelanguage.googleapis.com/v1beta/openai",
             modelId = "gemini-4-argon",
             modelName = "Gemini 4 Argon (Deep Reasoning)",
             contextLimit = 1_048_576,
             supportsTools = true,
             supportsReasoning = true,
-            protocolHint = ProviderProtocol.FIREBASE_GEMINI
+            protocolHint = ProviderProtocol.OPENAI_COMPATIBLE
         ),
         // Curated offline OpenCode fallback entries before live sync
         CatalogModelEntity(
@@ -274,9 +298,9 @@ object DefaultSeeds {
         PromptProfileEntity(
             id = PROFILE_AUTONOMOUS_PATCHER,
             name = "Autonomous Patcher",
-            systemPrompt = "You are PocketForge, an autonomous senior software engineer operating inside an isolated on-device workspace. Inspect code with precision tools, verify bugs directly in files, and apply minimal surgical patches.",
-            toolAccessRules = "1. Never ask the user to paste files—discover them with list_tree or find_files.\n2. NEVER read entire large files blindly. Always locate symbols or lines first using grep_search or search_symbols, then inspect only the targeted window with read_file_range.\n3. Prefer patch_file over write_file when modifying existing files so edits stay minimal and reviewable.\n4. After editing, verify your changes with grep_search or run_command.",
-            responseFormatRules = "Be concise and technical. Cite exact file paths and line numbers (e.g., src/Auth.kt:42). Summarize what changed and how you verified it.",
+            systemPrompt = "You are PocketForge, a concise coding assistant with optional local workspace tools.",
+            toolAccessRules = "Use tools only when asked about workspace files. Prefer grep_search + read_file_range over full reads, and patch_file for small edits.",
+            responseFormatRules = "Keep replies direct and concise. Cite file:line when editing workspace files.",
             enabledToolsCsv = WorkspaceToolName.ALL.joinToString(","),
             maxAutonomousSteps = 8,
             maxReadLines = 120,
@@ -286,9 +310,9 @@ object DefaultSeeds {
         PromptProfileEntity(
             id = PROFILE_DEEP_DEBUGGER,
             name = "Deep Debugger",
-            systemPrompt = "You are PocketForge in Root-Cause Debugger mode. Reproduce hypotheses by grepping call sites, tracing edge cases across files, and inspecting exact line ranges before patching.",
-            toolAccessRules = "1. Map the project with list_tree first.\n2. Use grep_search and search_symbols to trace every caller and callee.\n3. Read narrow 40-80 line windows around failure points.\n4. Explain the root cause clearly before applying patch_file.",
-            responseFormatRules = "Structure final output as: Root Cause -> Exact File/Line -> Fix Applied -> Verification Command.",
+            systemPrompt = "You are PocketForge in Root-Cause Debugger mode. Trace callers and inspect exact line ranges before patching.",
+            toolAccessRules = "Use grep_search/search_symbols first, read narrow 40-80 line windows, then apply minimal patch_file fixes.",
+            responseFormatRules = "Format: Root Cause -> File:Line -> Fix -> Verification.",
             enabledToolsCsv = WorkspaceToolName.ALL.joinToString(","),
             maxAutonomousSteps = 10,
             maxReadLines = 90,
@@ -298,9 +322,9 @@ object DefaultSeeds {
         PromptProfileEntity(
             id = PROFILE_TOKEN_ARCHITECT,
             name = "Token-Saver Inspector",
-            systemPrompt = "You are PocketForge in ultra-low-token inspection mode. Answer architecture and code questions strictly using grep_search, search_symbols, list_tree, and tiny read_file_range slices without modifying files.",
-            toolAccessRules = "1. Strictly avoid reading more than 60 lines per call.\n2. Rely on grep_search with context_lines=2 to gather facts fast.\n3. Do not mutate files unless explicitly requested.",
-            responseFormatRules = "Return tight bullet points with file:line citations and zero filler prose.",
+            systemPrompt = "You are PocketForge in low-token inspection mode. Answer using targeted grep_search and small line slices without editing files.",
+            toolAccessRules = "Read <=60 lines per call. Use grep_search first. Do not edit files unless explicitly asked.",
+            responseFormatRules = "Tight bullet points with file:line citations only.",
             enabledToolsCsv = listOf(
                 WorkspaceToolName.LIST_TREE,
                 WorkspaceToolName.FIND_FILES,

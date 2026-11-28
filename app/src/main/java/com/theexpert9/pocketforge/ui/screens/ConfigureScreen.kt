@@ -61,8 +61,11 @@ import androidx.compose.ui.unit.dp
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.sp
+import com.theexpert9.pocketforge.data.ai.AiResiliencePolicy
 import com.theexpert9.pocketforge.data.db.CatalogModelEntity
 import com.theexpert9.pocketforge.data.db.PromptProfileEntity
 import com.theexpert9.pocketforge.data.db.ProviderConfigEntity
@@ -75,6 +78,12 @@ import com.theexpert9.pocketforge.util.BrowserLauncher
 import com.theexpert9.pocketforge.viewmodel.PocketForgeUiState
 import java.util.UUID
 import kotlin.math.roundToInt
+
+private enum class ConfigureSubTab {
+    PROVIDERS,
+    PROMPT_STUDIO,
+    SYSTEM_LOGCAT
+}
 
 @Composable
 fun ConfigureScreen(
@@ -90,10 +99,16 @@ fun ConfigureScreen(
     onSelectPromptProfile: (String) -> Unit,
     onSavePromptProfile: (PromptProfileEntity) -> Unit,
     onDeletePromptProfile: (String) -> Unit,
+    onRefreshTermuxStatus: () -> Unit,
+    onSetTermuxEnabled: (Boolean) -> Unit,
+    onTestTermux: () -> Unit,
+    onRefreshLogcat: () -> Unit,
+    onClearLogcat: () -> Unit,
+    onNotify: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val ideColors = LocalIdeColors.current
-    var showPromptStudio by remember { mutableStateOf(false) }
+    var activeSubTab by remember { mutableStateOf(ConfigureSubTab.PROVIDERS) }
     var editingProvider by remember { mutableStateOf<ProviderConfigEntity?>(null) }
     var creatingCustomProvider by remember { mutableStateOf(false) }
 
@@ -107,28 +122,36 @@ fun ConfigureScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(
-                    selected = !showPromptStudio,
-                    onClick = { showPromptStudio = false },
+                    selected = activeSubTab == ConfigureSubTab.PROVIDERS,
+                    onClick = { activeSubTab = ConfigureSubTab.PROVIDERS },
                     leadingIcon = { Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                    label = { Text("Providers & OpenCode") },
+                    label = { Text("Providers") },
                     modifier = Modifier.testTag("configure_providers_tab")
                 )
                 FilterChip(
-                    selected = showPromptStudio,
-                    onClick = { showPromptStudio = true },
+                    selected = activeSubTab == ConfigureSubTab.PROMPT_STUDIO,
+                    onClick = { activeSubTab = ConfigureSubTab.PROMPT_STUDIO },
                     leadingIcon = { Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp)) },
                     label = { Text("Prompt & Tools") },
                     modifier = Modifier.testTag("configure_prompt_studio_tab")
                 )
+                FilterChip(
+                    selected = activeSubTab == ConfigureSubTab.SYSTEM_LOGCAT,
+                    onClick = { activeSubTab = ConfigureSubTab.SYSTEM_LOGCAT },
+                    leadingIcon = { Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                    label = { Text("System & Logcat") },
+                    modifier = Modifier.testTag("configure_system_logcat_tab")
+                )
             }
         }
 
-        if (!showPromptStudio) {
-            ProvidersAndOpenCodePane(
+        when (activeSubTab) {
+            ConfigureSubTab.PROVIDERS -> ProvidersAndOpenCodePane(
                 uiState = uiState,
                 hasApiKey = hasApiKey,
                 maskedApiKey = maskedApiKey,
@@ -140,13 +163,21 @@ fun ConfigureScreen(
                 onDeleteProvider = onDeleteProvider,
                 onTestProvider = onTestProvider
             )
-        } else {
-            PromptStudioPane(
+            ConfigureSubTab.PROMPT_STUDIO -> PromptStudioPane(
                 profiles = uiState.promptProfiles,
                 activeProfile = uiState.activePromptProfile,
                 onSelectProfile = onSelectPromptProfile,
                 onSaveProfile = onSavePromptProfile,
                 onDeleteProfile = onDeletePromptProfile
+            )
+            ConfigureSubTab.SYSTEM_LOGCAT -> ConfigureSystemPane(
+                uiState = uiState,
+                onRefreshTermuxStatus = onRefreshTermuxStatus,
+                onSetTermuxEnabled = onSetTermuxEnabled,
+                onTestTermux = onTestTermux,
+                onRefreshLogcat = onRefreshLogcat,
+                onClearLogcat = onClearLogcat,
+                onNotify = onNotify
             )
         }
     }
@@ -479,7 +510,35 @@ private fun ProvidersAndOpenCodePane(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(model.modelName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = model.modelName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (AiResiliencePolicy.isSubscriptionRequiredModel(model.modelId)) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = ideColors.warningBg
+                                ) {
+                                    Text(
+                                        text = "NEEDS SUBSCRIPTION",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = ideColors.warningText,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
                         Text(
                             text = "${model.providerName} · ${model.modelId} · ${model.contextLimit / 1000}K ctx",
                             style = MaterialTheme.typography.labelSmall,

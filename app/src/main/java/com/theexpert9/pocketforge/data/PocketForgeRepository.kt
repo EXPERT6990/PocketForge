@@ -18,6 +18,8 @@ import com.theexpert9.pocketforge.data.db.WorkspaceEntity
 import com.theexpert9.pocketforge.data.sandbox.GrepMatch
 import com.theexpert9.pocketforge.data.sandbox.SandboxedTerminalEngine
 import com.theexpert9.pocketforge.data.sandbox.TerminalCommandResult
+import com.theexpert9.pocketforge.data.sandbox.TermuxBridge
+import com.theexpert9.pocketforge.data.sandbox.TermuxEnvironmentStatus
 import com.theexpert9.pocketforge.data.sandbox.WorkspaceFileNode
 import com.theexpert9.pocketforge.data.sandbox.WorkspaceSandbox
 import com.theexpert9.pocketforge.data.security.SecretVault
@@ -30,6 +32,7 @@ class PocketForgeRepository(
     private val db: PocketForgeDatabase,
     private val sandbox: WorkspaceSandbox,
     private val terminalEngine: SandboxedTerminalEngine,
+    private val termuxBridge: TermuxBridge,
     private val secretVault: SecretVault,
     private val catalogService: OpenCodeCatalogService,
     private val httpClient: HttpAiProviderClient,
@@ -60,9 +63,28 @@ class PocketForgeRepository(
         }
         if (db.catalogModelDao().count() == 0) {
             db.catalogModelDao().upsertAll(DefaultSeeds.defaultCatalogModels())
+        } else {
+            // Migrate existing installs: move subscription-only Gemini 4 Argon from built-in to AI Studio Key only
+            db.catalogModelDao().deleteByCompositeId("${DefaultSeeds.PROVIDER_FIREBASE_GEMINI}:gemini-4-argon")
+            DefaultSeeds.defaultCatalogModels()
+                .filter { it.providerId == "google_ai_studio" || it.providerId == DefaultSeeds.PROVIDER_FIREBASE_GEMINI }
+                .forEach { db.catalogModelDao().upsert(it) }
         }
-        if (db.promptProfileDao().getDefault() == null) {
+        db.sessionDao().migrateModelForProvider(
+            providerId = DefaultSeeds.PROVIDER_FIREBASE_GEMINI,
+            oldModelId = "gemini-4-argon",
+            newModelId = DefaultSeeds.DEFAULT_GEMINI_MODEL
+        )
+
+        val defaultProfile = db.promptProfileDao().getDefault()
+        if (defaultProfile == null) {
             db.promptProfileDao().upsertAll(DefaultSeeds.defaultPromptProfiles())
+        } else if (defaultProfile.id == DefaultSeeds.PROFILE_AUTONOMOUS_PATCHER &&
+            defaultProfile.toolAccessRules.contains("Never ask the user to paste files")
+        ) {
+            // Upgrade legacy verbose default prompt to the lean token-efficient v1.0.1 prompt
+            val leanDefault = DefaultSeeds.defaultPromptProfiles().first()
+            db.promptProfileDao().upsert(leanDefault)
         }
 
         val existingWorkspaces = db.workspaceDao().getAllOnce()
@@ -260,14 +282,48 @@ class PocketForgeRepository(
             }
         }
 
-    // --- Sandboxed Terminal ---
+    // --- Sandboxed Terminal & Optional Termux Bridge ---
+
+    fun getTermuxStatus(): TermuxEnvironmentStatus = termuxBridge.getStatus()
+
+    fun setTermuxEnabled(enabled: Boolean): TermuxEnvironmentStatus {
+        termuxBridge.setEnabled(enabled)
+        return termuxBridge.getStatus()
+    }
+
+    suspend fun testTermuxBridge(workspace: WorkspaceEntity): TerminalCommandResult =
+        termuxBridge.executeCommand(
+            rootDirName = workspace.rootDirName,
+            currentWorkingDir = "",
+            rawCommand = "echo \"Termux OK\" && which python3 java javac g++ node git 2>/dev/null || true",
+            timeoutMs = 20_000L
+        )
 
     suspend fun runTerminalCommand(
         workspace: WorkspaceEntity,
         currentWorkingDir: String,
         command: String
     ): TerminalCommandResult = withContext(Dispatchers.IO) {
-        val result = terminalEngine.execute(workspace.rootDirName, currentWorkingDir, command)
+        val status = termuxBridge.getStatus()
+        val delegate = termuxBridge.shouldDelegateToTermux(command)
+        val result = when {
+            delegate && (status.isReady || command.trim().startsWith("termux ", ignoreCase = true)) -> {
+                termuxBridge.executeCommand(workspace.rootDirName, currentWorkingDir, command)
+            }
+            else -> {
+                val local = terminalEngine.execute(workspace.rootDirName, currentWorkingDir, command)
+                if (local.exitCode == 127 && delegate && status.isInstalled && !status.isReady) {
+                    val hint = if (!status.hasRunCommandPermission) {
+                        "Tip: Termux is installed! Grant Termux RUN_COMMAND permission in Configure > System & Logcat to run compilers/build tools."
+                    } else {
+                        "Tip: Enable Termux Bridge in Configure > System & Logcat to run this command with Termux."
+                    }
+                    local.copy(output = "${local.output}\n$hint")
+                } else {
+                    local
+                }
+            }
+        }
         if (result.clearRequested) {
             db.terminalDao().clearWorkspace(workspace.id)
         } else if (command.isNotBlank()) {

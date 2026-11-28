@@ -73,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.theexpert9.pocketforge.data.ai.AiResiliencePolicy
 import com.theexpert9.pocketforge.data.db.CatalogModelEntity
 import com.theexpert9.pocketforge.data.db.ChatMessageEntity
 import com.theexpert9.pocketforge.data.db.FileSnapshotEntity
@@ -581,11 +582,35 @@ fun ModelQuickPickerSheet(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = m.modelName,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = m.modelName,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            )
+                                            if (AiResiliencePolicy.isSubscriptionRequiredModel(m.modelId)) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = ideColors.warningBg
+                                                ) {
+                                                    Text(
+                                                        text = "NEEDS SUBSCRIPTION",
+                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                            fontSize = 9.sp,
+                                                            fontWeight = FontWeight.Bold
+                                                        ),
+                                                        color = ideColors.warningText,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
                                         Text(
                                             text = m.modelId,
                                             style = MaterialTheme.typography.labelSmall,

@@ -225,7 +225,13 @@ fun PocketForgeApp(
                                     onTestProvider = viewModel::testProvider,
                                     onSelectPromptProfile = viewModel::selectPromptProfileForWorkspace,
                                     onSavePromptProfile = viewModel::savePromptProfile,
-                                    onDeletePromptProfile = viewModel::deletePromptProfile
+                                    onDeletePromptProfile = viewModel::deletePromptProfile,
+                                    onRefreshTermuxStatus = viewModel::refreshTermuxStatus,
+                                    onSetTermuxEnabled = viewModel::setTermuxEnabled,
+                                    onTestTermux = viewModel::testTermuxBridge,
+                                    onRefreshLogcat = viewModel::refreshLogcat,
+                                    onClearLogcat = viewModel::clearLogcat,
+                                    onNotify = viewModel::showInfoBanner
                                 )
                                 else -> FilesScreen(
                                     uiState = uiState,
@@ -353,7 +359,13 @@ fun PocketForgeApp(
                             onTestProvider = viewModel::testProvider,
                             onSelectPromptProfile = viewModel::selectPromptProfileForWorkspace,
                             onSavePromptProfile = viewModel::savePromptProfile,
-                            onDeletePromptProfile = viewModel::deletePromptProfile
+                            onDeletePromptProfile = viewModel::deletePromptProfile,
+                            onRefreshTermuxStatus = viewModel::refreshTermuxStatus,
+                            onSetTermuxEnabled = viewModel::setTermuxEnabled,
+                            onTestTermux = viewModel::testTermuxBridge,
+                            onRefreshLogcat = viewModel::refreshLogcat,
+                            onClearLogcat = viewModel::clearLogcat,
+                            onNotify = viewModel::showInfoBanner
                         )
                     }
                 }

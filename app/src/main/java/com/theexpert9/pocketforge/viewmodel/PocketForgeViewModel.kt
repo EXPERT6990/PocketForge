@@ -22,7 +22,10 @@ import com.theexpert9.pocketforge.data.db.TerminalEntryEntity
 import com.theexpert9.pocketforge.data.db.WorkspaceEntity
 import com.theexpert9.pocketforge.data.sandbox.ClipboardPatchProposal
 import com.theexpert9.pocketforge.data.sandbox.GrepMatch
+import com.theexpert9.pocketforge.data.sandbox.TermuxEnvironmentStatus
 import com.theexpert9.pocketforge.data.sandbox.WorkspaceFileNode
+import com.theexpert9.pocketforge.util.LogcatEntry
+import com.theexpert9.pocketforge.util.LogcatReader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -90,6 +93,11 @@ data class PocketForgeUiState(
     val serviceVerificationMap: Map<String, ServiceVerifyState> = emptyMap(),
     val keyVaultRevision: Int = 0,
     val googleProfile: GoogleProfileState = GoogleProfileState(),
+    val termuxStatus: TermuxEnvironmentStatus = TermuxEnvironmentStatus(),
+    val isTestingTermux: Boolean = false,
+    val termuxTestOutput: String? = null,
+    val logcatEntries: List<LogcatEntry> = emptyList(),
+    val isLoadingLogs: Boolean = false,
     val banner: StatusBanner? = null,
     val draftPrompt: String = ""
 ) {
@@ -120,6 +128,7 @@ class PocketForgeViewModel(
     private var activeAgentJob: Job? = null
     private var lastSubmittedPrompt: String? = null
     private var silentAuthAttempted = false
+    private var authObserverStarted = false
 
     init {
         observeGlobalStreams()
@@ -137,7 +146,8 @@ class PocketForgeViewModel(
                     it.copy(
                         isBooting = false,
                         activeWorkspaceId = ws.id,
-                        activeSessionId = session.id
+                        activeSessionId = session.id,
+                        termuxStatus = repo.getTermuxStatus()
                     )
                 }
                 refreshWorkspaceFiles(ws.rootDirName)
@@ -228,6 +238,24 @@ class PocketForgeViewModel(
     // --- Native Google Sign-In Profile (Credential Manager + Firebase Auth) ---
 
     fun syncGoogleAuthOnLaunch(context: Context) {
+        if (!authObserverStarted) {
+            authObserverStarted = true
+            viewModelScope.launch {
+                GoogleAuthManager.observeAuthState(context).collectLatest { user ->
+                    _uiState.update { state ->
+                        if (user != null) {
+                            state.copy(googleProfile = GoogleProfileState.fromFirebaseUser(user))
+                        } else if (!state.googleProfile.isAuthenticating) {
+                            state.copy(
+                                googleProfile = GoogleProfileState(authError = state.googleProfile.authError)
+                            )
+                        } else {
+                            state
+                        }
+                    }
+                }
+            }
+        }
         val current = GoogleAuthManager.currentUser(context)
         if (current != null) {
             _uiState.update { it.copy(googleProfile = GoogleProfileState.fromFirebaseUser(current)) }
@@ -253,18 +281,23 @@ class PocketForgeViewModel(
         viewModelScope.launch {
             when (val outcome = GoogleAuthManager.signInWithGoogle(context)) {
                 is GoogleSignInOutcome.Success -> {
-                    val profile = GoogleProfileState.fromFirebaseUser(outcome.user)
                     _uiState.update {
                         it.copy(
-                            googleProfile = profile,
-                            banner = StatusBanner("Signed into PocketForge as ${profile.displayName ?: "Google User"}")
+                            googleProfile = outcome.profile,
+                            banner = StatusBanner("Signed into PocketForge as ${outcome.profile.displayName ?: "Google User"}")
                         )
                     }
                 }
                 is GoogleSignInOutcome.Cancelled -> {
                     _uiState.update {
                         it.copy(
-                            googleProfile = it.googleProfile.copy(isAuthenticating = false, authError = null)
+                            googleProfile = it.googleProfile.copy(
+                                isAuthenticating = false,
+                                authError = outcome.diagnosticHint
+                            ),
+                            banner = outcome.diagnosticHint?.let { hint ->
+                                StatusBanner(hint, isError = true)
+                            }
                         )
                     }
                 }
@@ -290,6 +323,65 @@ class PocketForgeViewModel(
                 it.copy(
                     googleProfile = GoogleProfileState(),
                     banner = StatusBanner("Signed out of Google account. Local workspaces remain intact on device.")
+                )
+            }
+        }
+    }
+
+    // --- Termux Compatibility & In-App Logcat Diagnostics ---
+
+    fun refreshTermuxStatus() {
+        _uiState.update { it.copy(termuxStatus = repo.getTermuxStatus()) }
+    }
+
+    fun setTermuxEnabled(enabled: Boolean) {
+        val status = repo.setTermuxEnabled(enabled)
+        _uiState.update {
+            it.copy(
+                termuxStatus = status,
+                banner = StatusBanner(
+                    if (enabled) "Termux compiler bridge enabled." else "Termux bridge disabled; using in-app sandbox shell only."
+                )
+            )
+        }
+    }
+
+    fun testTermuxBridge() {
+        val ws = _uiState.value.activeWorkspace ?: return
+        if (_uiState.value.isTestingTermux) return
+        _uiState.update { it.copy(isTestingTermux = true, termuxTestOutput = null) }
+        viewModelScope.launch {
+            val res = repo.testTermuxBridge(ws)
+            _uiState.update {
+                it.copy(
+                    isTestingTermux = false,
+                    termuxStatus = repo.getTermuxStatus(),
+                    termuxTestOutput = res.output,
+                    banner = StatusBanner(
+                        if (res.exitCode == 0) "Termux bridge verified!" else "Termux test exited with code ${res.exitCode}",
+                        isError = res.exitCode != 0
+                    )
+                )
+            }
+        }
+    }
+
+    fun refreshLogcat() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingLogs = true) }
+            val logs = LogcatReader.readAppLogs(maxLines = 400)
+            _uiState.update { it.copy(logcatEntries = logs, isLoadingLogs = false) }
+        }
+    }
+
+    fun clearLogcat() {
+        viewModelScope.launch {
+            LogcatReader.clearAppLogs()
+            val logs = LogcatReader.readAppLogs(maxLines = 400)
+            _uiState.update {
+                it.copy(
+                    logcatEntries = logs,
+                    banner = StatusBanner("Cleared app logcat buffer.")
                 )
             }
         }

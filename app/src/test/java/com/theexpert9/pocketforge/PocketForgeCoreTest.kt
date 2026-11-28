@@ -102,4 +102,35 @@ class PocketForgeCoreTest {
         assertTrue(chain.any { it.modelId == "gemini-3.5-flash-lite" && it.providerId == "google_ai_studio" })
         assertTrue(chain.any { it.providerId == DefaultSeeds.PROVIDER_FIREBASE_GEMINI && it.modelId == DefaultSeeds.DEFAULT_GEMINI_MODEL })
     }
+
+    @Test
+    fun geminiArgon_isApiKeyOnlyWithSubscriptionFlagAndExcludedFromBuiltInFallback() {
+        val defaults = DefaultSeeds.defaultCatalogModels()
+        assertFalse(
+            defaults.any { it.providerId == DefaultSeeds.PROVIDER_FIREBASE_GEMINI && it.modelId == "gemini-4-argon" }
+        )
+        assertTrue(
+            defaults.any { it.providerId == "google_ai_studio" && it.modelId == "gemini-4-argon" }
+        )
+        assertTrue(AiResiliencePolicy.isSubscriptionRequiredModel("gemini-4-argon"))
+        assertFalse(AiResiliencePolicy.isSubscriptionRequiredModel("gemini-3.8-flash"))
+
+        val builtInProvider = DefaultSeeds.defaultProviders().first { it.id == DefaultSeeds.PROVIDER_FIREBASE_GEMINI }
+        val builtInChain = AiResiliencePolicy.buildAttemptChain(
+            primaryProvider = builtInProvider,
+            requestedModelId = "gemini-3.8-flash",
+            firebaseBuiltInAvailable = true
+        )
+        assertFalse(builtInChain.any { it.modelId == "gemini-4-argon" })
+    }
+
+    @Test
+    fun logcatReader_parsesStandardTimeFormatLine() {
+        val raw = "11-27 19:45:12.345 W/Auth(12345): Google Sign-In cancelled"
+        val parsed = com.theexpert9.pocketforge.util.LogcatReader.parseLine(1, raw)
+        assertEquals("11-27 19:45:12.345", parsed.timestamp)
+        assertEquals("W", parsed.level)
+        assertEquals("Auth", parsed.tag)
+        assertEquals("Google Sign-In cancelled", parsed.message)
+    }
 }
