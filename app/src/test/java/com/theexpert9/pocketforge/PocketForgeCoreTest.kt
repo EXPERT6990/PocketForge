@@ -133,4 +133,18 @@ class PocketForgeCoreTest {
         assertEquals("Auth", parsed.tag)
         assertEquals("Google Sign-In cancelled", parsed.message)
     }
+
+    @Test
+    fun providerSorting_pinsBuiltInGeminiAndOpenCodeToTop() {
+        val shuffled = DefaultSeeds.defaultProviders().sortedBy { it.displayName }
+        val sorted = DefaultSeeds.sortProviders(shuffled)
+        assertEquals(DefaultSeeds.PROVIDER_FIREBASE_GEMINI, sorted[0].id)
+        assertEquals("openrouter", sorted[1].id)
+        assertEquals("google_ai_studio", sorted[2].id)
+
+        val sortedCatalog = DefaultSeeds.sortCatalogModels(DefaultSeeds.defaultCatalogModels().reversed())
+        assertEquals(DefaultSeeds.PROVIDER_FIREBASE_GEMINI, sortedCatalog.first().providerId)
+        val firstNonBuiltIn = sortedCatalog.first { it.providerId != DefaultSeeds.PROVIDER_FIREBASE_GEMINI }
+        assertEquals("openrouter", firstNonBuiltIn.providerId)
+    }
 }

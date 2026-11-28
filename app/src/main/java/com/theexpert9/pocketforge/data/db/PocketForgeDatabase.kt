@@ -339,4 +339,34 @@ object DefaultSeeds {
             isDefault = false
         )
     )
+
+    fun providerSortRank(providerId: String, isCustom: Boolean = false): Int {
+        if (isCustom) return 100
+        return when (providerId) {
+            PROVIDER_FIREBASE_GEMINI -> 0
+            "openrouter" -> 1
+            "google_ai_studio" -> 2
+            "openai" -> 3
+            "anthropic" -> 4
+            "deepseek" -> 5
+            "groq" -> 6
+            "ollama" -> 7
+            else -> 50
+        }
+    }
+
+    fun sortProviders(providers: List<ProviderConfigEntity>): List<ProviderConfigEntity> {
+        return providers.sortedWith(
+            compareBy<ProviderConfigEntity> { providerSortRank(it.id, it.isCustom) }
+                .thenBy { it.displayName.lowercase() }
+        )
+    }
+
+    fun sortCatalogModels(models: List<CatalogModelEntity>): List<CatalogModelEntity> {
+        return models.sortedWith(
+            compareBy<CatalogModelEntity> { providerSortRank(it.providerId, isCustom = false) }
+                .thenBy { it.providerName.lowercase() }
+                .thenBy { it.modelName.lowercase() }
+        )
+    }
 }

@@ -25,6 +25,7 @@ import com.theexpert9.pocketforge.data.sandbox.WorkspaceSandbox
 import com.theexpert9.pocketforge.data.security.SecretVault
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
@@ -40,7 +41,9 @@ class PocketForgeRepository(
 ) {
     val workspaces: Flow<List<WorkspaceEntity>> = db.workspaceDao().observeAll()
     val providers: Flow<List<ProviderConfigEntity>> = db.providerDao().observeAll()
+        .map { DefaultSeeds.sortProviders(it) }
     val catalogModels: Flow<List<CatalogModelEntity>> = db.catalogModelDao().observeAll()
+        .map { DefaultSeeds.sortCatalogModels(it) }
     val promptProfiles: Flow<List<PromptProfileEntity>> = db.promptProfileDao().observeAll()
 
     fun observeSessions(workspaceId: String): Flow<List<ChatSessionEntity>> =

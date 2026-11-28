@@ -254,56 +254,6 @@ private fun ProvidersAndOpenCodePane(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = Modifier.fillMaxSize()
     ) {
-        // Guided Quick Connect Official API Keys Strip
-        item {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Guided API Key Setup (Gemini · OpenAI · Claude)", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        text = "Open the official developer portal to grab a personal key, then paste it into the encrypted Keystore vault below.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { pendingKeyPortal = "Google AI Studio (Gemini)" to "https://aistudio.google.com/apikey" },
-                            modifier = Modifier.testTag("guided_key_gemini")
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(Modifier.width(5.dp))
-                            Text("Gemini Key")
-                        }
-                        OutlinedButton(
-                            onClick = { pendingKeyPortal = "OpenAI Platform" to "https://platform.openai.com/api-keys" },
-                            modifier = Modifier.testTag("guided_key_openai")
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(Modifier.width(5.dp))
-                            Text("OpenAI Key")
-                        }
-                        OutlinedButton(
-                            onClick = { pendingKeyPortal = "Anthropic Console" to "https://console.anthropic.com/settings/keys" },
-                            modifier = Modifier.testTag("guided_key_claude")
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(Modifier.width(5.dp))
-                            Text("Claude Key")
-                        }
-                    }
-                }
-            }
-        }
-
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -313,7 +263,7 @@ private fun ProvidersAndOpenCodePane(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Configured Providers", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = "API keys are AES-256 encrypted locally in Android Keystore.",
+                        text = "Built-in Gemini & OpenCode pinned first. API keys are AES-256 encrypted locally.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -434,9 +384,60 @@ private fun ProvidersAndOpenCodePane(
             }
         }
 
+        // Guided Quick Connect Official API Keys Strip
+        item {
+            Spacer(Modifier.height(4.dp))
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Guided API Key Setup (Gemini · OpenAI · Claude)", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = "Open the official developer portal to grab a personal key, then paste it into the encrypted Keystore vault above.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { pendingKeyPortal = "Google AI Studio (Gemini)" to "https://aistudio.google.com/apikey" },
+                            modifier = Modifier.testTag("guided_key_gemini")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("Gemini Key")
+                        }
+                        OutlinedButton(
+                            onClick = { pendingKeyPortal = "OpenAI Platform" to "https://platform.openai.com/api-keys" },
+                            modifier = Modifier.testTag("guided_key_openai")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("OpenAI Key")
+                        }
+                        OutlinedButton(
+                            onClick = { pendingKeyPortal = "Anthropic Console" to "https://console.anthropic.com/settings/keys" },
+                            modifier = Modifier.testTag("guided_key_claude")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text("Claude Key")
+                        }
+                    }
+                }
+            }
+        }
+
         // OpenCode Live Registry Section
         item {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,

@@ -3,6 +3,7 @@ package com.theexpert9.pocketforge.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,8 +50,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,6 +66,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.theexpert9.pocketforge.BuildConfig
 import com.theexpert9.pocketforge.data.sandbox.TermuxBridge
 import com.theexpert9.pocketforge.getFirebaseDiagnosticStatus
@@ -83,23 +90,48 @@ fun ConfigureSystemPane(
     val ideColors = LocalIdeColors.current
     val firebaseStatus = remember(context) { getFirebaseDiagnosticStatus(context) }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
     var selectedLevel by remember { mutableStateOf("ALL") }
     var selectedTag by remember { mutableStateOf("All") }
     var searchQuery by remember { mutableStateOf("") }
+    var lastPermPromptStartMs by remember { mutableLongStateOf(0L) }
 
     val termuxPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         onRefreshTermuxStatus()
-        onNotify(
-            if (granted) "Termux RUN_COMMAND permission granted."
-            else "Termux RUN_COMMAND permission denied. You can enable it in Android App Settings."
-        )
+        if (granted) {
+            onNotify("Termux RUN_COMMAND permission granted.")
+        } else {
+            val elapsedMs = SystemClock.elapsedRealtime() - lastPermPromptStartMs
+            if (elapsedMs < 450L) {
+                // Android 11+ frequently auto-denies third-party custom dangerous permissions without showing a dialog.
+                // Redirect directly to PocketForge's App Info screen where the toggle lives under Additional permissions.
+                val opened = TermuxBridge.openAppPermissionSettings(context)
+                if (opened) {
+                    onNotify("In App Settings, tap Permissions -> Additional permissions -> Run commands in Termux environment.")
+                } else {
+                    onNotify("Enable 'Run commands in Termux environment' in Android App Settings -> Permissions -> Additional permissions.")
+                }
+            } else {
+                onNotify("Permission denied. Tap 'App Settings' -> Permissions -> Additional permissions to enable Termux access.")
+            }
+        }
     }
 
     LaunchedEffect(Unit) {
         onRefreshTermuxStatus()
         onRefreshLogcat()
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                onRefreshTermuxStatus()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val filteredLogs = remember(uiState.logcatEntries, selectedLevel, selectedTag, searchQuery) {
@@ -285,13 +317,20 @@ fun ConfigureSystemPane(
                         }
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             if (!termux.hasRunCommandPermission) {
                                 Button(
                                     onClick = {
-                                        termuxPermissionLauncher.launch(TermuxBridge.PERMISSION_RUN_COMMAND)
+                                        if (!termux.isPermissionDeclaredByTermux) {
+                                            onNotify("Installed Termux build does not declare RUN_COMMAND. Install Termux from F-Droid or GitHub Releases.")
+                                        } else {
+                                            lastPermPromptStartMs = SystemClock.elapsedRealtime()
+                                            termuxPermissionLauncher.launch(TermuxBridge.PERMISSION_RUN_COMMAND)
+                                        }
                                     },
                                     modifier = Modifier
                                         .heightIn(min = 44.dp)
@@ -300,6 +339,22 @@ fun ConfigureSystemPane(
                                     Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
                                     Text("Grant Permission")
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        if (TermuxBridge.openAppPermissionSettings(context)) {
+                                            onNotify("Tap Permissions -> Additional permissions -> Run commands in Termux environment.")
+                                        } else {
+                                            onNotify("Open Android Settings -> Apps -> PocketForge -> Permissions -> Additional permissions.")
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .heightIn(min = 44.dp)
+                                        .testTag("open_termux_app_settings_button")
+                                ) {
+                                    Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(5.dp))
+                                    Text("App Settings")
                                 }
                             }
                             OutlinedButton(
@@ -317,6 +372,18 @@ fun ConfigureSystemPane(
                                 Spacer(Modifier.width(5.dp))
                                 Text("Test Compilers")
                             }
+                        }
+
+                        if (!termux.hasRunCommandPermission) {
+                            Text(
+                                text = if (!termux.isPermissionDeclaredByTermux) {
+                                    "Your Termux build does not expose RUN_COMMAND permission. Use the F-Droid or GitHub Releases build of Termux."
+                                } else {
+                                    "Android 11+ note: If the system skips the popup, tap App Settings -> Permissions -> Additional permissions -> Run commands in Termux environment. Status updates automatically when you return."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
 
                         Text(

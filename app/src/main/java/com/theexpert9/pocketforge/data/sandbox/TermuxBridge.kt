@@ -1,12 +1,15 @@
 package com.theexpert9.pocketforge.data.sandbox
 
+import android.app.Activity
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -21,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
 data class TermuxEnvironmentStatus(
     val isInstalled: Boolean = false,
     val hasRunCommandPermission: Boolean = false,
+    val isPermissionDeclaredByTermux: Boolean = false,
     val isEnabled: Boolean = false,
     val versionName: String? = null
 ) {
@@ -55,6 +59,13 @@ class TermuxBridge(
         }.getOrNull()
     }
 
+    fun isRunCommandPermissionDeclared(): Boolean {
+        return runCatching {
+            context.packageManager.getPermissionInfo(PERMISSION_RUN_COMMAND, 0)
+            true
+        }.getOrDefault(false)
+    }
+
     fun hasRunCommandPermission(): Boolean {
         return ContextCompat.checkSelfPermission(context, PERMISSION_RUN_COMMAND) ==
             PackageManager.PERMISSION_GRANTED
@@ -74,10 +85,19 @@ class TermuxBridge(
 
     fun getStatus(): TermuxEnvironmentStatus {
         val version = getTermuxVersionName()
+        val installed = version != null
+        val declared = if (installed) isRunCommandPermissionDeclared() else false
+        val granted = hasRunCommandPermission()
+        val enabled = isEnabled()
+        Log.d(
+            TAG,
+            "Termux status: installed=$installed (ver=$version), permDeclared=$declared, granted=$granted, enabled=$enabled"
+        )
         return TermuxEnvironmentStatus(
-            isInstalled = version != null,
-            hasRunCommandPermission = hasRunCommandPermission(),
-            isEnabled = isEnabled(),
+            isInstalled = installed,
+            hasRunCommandPermission = granted,
+            isPermissionDeclaredByTermux = declared,
+            isEnabled = enabled,
             versionName = version
         )
     }
@@ -323,5 +343,26 @@ class TermuxBridge(
             "head", "tail", "grep", "rg", "find", "wc", "stat",
             "mkdir", "touch", "cp", "mv", "rm", "diff", "echo", "jsonlint", "env"
         )
+
+        /**
+         * Opens Android App Info for PocketForge so the user can toggle
+         * Permissions -> Additional permissions -> Run commands in Termux environment.
+         */
+        fun openAppPermissionSettings(context: Context): Boolean {
+            return runCatching {
+                val intent = Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.packageName, null)
+                ).apply {
+                    if (context !is Activity) {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                }
+                context.startActivity(intent)
+                true
+            }.onFailure { err ->
+                Log.e(TAG, "Failed to open Android App Settings for Termux permission", err)
+            }.getOrDefault(false)
+        }
     }
 }
